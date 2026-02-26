@@ -276,6 +276,37 @@
         </form>
       </div>
     </div>
+
+    <!-- ADMIN VIEW -->
+    <div id="view-admin" class="view-section hidden animate-zoom-in">
+      <div class="max-w-6xl mx-auto pb-20">
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+            <i class="ph-fill ph-shield-check text-indigo-500 text-4xl"></i> Admin Control Panel
+          </h2>
+          <button onclick="navigate('home')" class="px-6 py-3 rounded-2xl bg-white dark:bg-slate-800 shadow-sm border border-slate-200 dark:border-slate-700 font-bold hover:shadow-md transition-all">Exit Admin</button>
+        </div>
+        <div class="bg-white dark:bg-slate-900 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider">
+                  <th class="p-6 font-bold">App Name</th>
+                  <th class="p-6 font-bold">Developer</th>
+                  <th class="p-6 font-bold">Type</th>
+                  <th class="p-6 font-bold">Visibility</th>
+                  <th class="p-6 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admin-apps-list" class="divide-y divide-slate-100 dark:divide-slate-800/50">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
   
   </div> <!-- END APP ROOT -->
@@ -376,6 +407,7 @@
               apps = [...fetchedApps, ...defaultApps];
               
               if (currentView === 'home') renderHome();
+              if (currentView === 'admin') renderAdmin();
             }, (error) => console.error("Firestore error:", error));
           }
         });
@@ -626,7 +658,8 @@
     const views = {
       home: document.getElementById('view-home'),
       details: document.getElementById('view-details'),
-      upload: document.getElementById('view-upload')
+      upload: document.getElementById('view-upload'),
+      admin: document.getElementById('view-admin')
     };
     const searchContainer = document.getElementById('search-container');
     const searchInput = document.getElementById('search-input');
@@ -653,6 +686,8 @@
         searchContainer.classList.add('hidden');
         if (viewName === 'details' && appId) {
           renderDetails(appId);
+        } else if (viewName === 'admin') {
+          renderAdmin();
         } else if (viewName === 'upload') {
           if (appId) {
             editingAppId = appId;
@@ -1109,6 +1144,76 @@
     document.getElementById('theme-toggle').addEventListener('click', () => {
       document.documentElement.classList.toggle('dark');
     });
+
+    // --- ADMIN EASTER EGG ---
+    let secretBuffer = '';
+    const secretCode = '07312012';
+    
+    document.addEventListener('keydown', (e) => {
+      // Only track if not typing in an input/textarea
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      
+      secretBuffer += e.key;
+      if (secretBuffer.length > secretCode.length) {
+        secretBuffer = secretBuffer.slice(-secretCode.length);
+      }
+      
+      if (secretBuffer === secretCode) {
+        secretBuffer = ''; // Reset buffer
+        navigate('admin');
+      }
+    });
+
+    window.renderAdmin = () => {
+      const adminList = document.getElementById('admin-apps-list');
+      adminList.innerHTML = apps.map(app => {
+        const isDefault = defaultApps.some(da => da.id === app.id);
+        return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors group">
+          <td class="p-6 font-bold text-slate-900 dark:text-white flex items-center gap-4">
+            ${app.icon ? `<img src="${app.icon}" class="w-10 h-10 rounded-xl object-cover shadow-sm">` : `<div class="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-500 flex items-center justify-center shadow-sm"><i class="${app.iconClass} text-xl"></i></div>`}
+            <div>
+              <div class="line-clamp-1">${app.title}</div>
+              <div class="text-xs font-medium text-slate-400 font-mono">${app.id}</div>
+            </div>
+          </td>
+          <td class="p-6 text-slate-600 dark:text-slate-300 font-medium">${app.developer}</td>
+          <td class="p-6 text-slate-600 dark:text-slate-300">
+            <span class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold uppercase tracking-wider">${app.payloadType}</span>
+          </td>
+          <td class="p-6 text-slate-600 dark:text-slate-300">
+            ${app.visibility === 'private' ? '<span class="text-amber-500 flex items-center gap-1"><i class="ph-fill ph-lock-key"></i> Private</span>' : '<span class="text-emerald-500 flex items-center gap-1"><i class="ph-fill ph-globe"></i> Public</span>'}
+          </td>
+          <td class="p-6 text-right">
+            ${isDefault ? 
+              `<span class="text-xs font-bold text-slate-400 uppercase tracking-widest">System App</span>` 
+              : 
+              `<div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="navigate('upload', '${app.id}')" class="text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 px-4 py-2 rounded-xl font-bold transition-all">Edit</button>
+                <button id="admin-del-${app.id}" onclick="adminDeleteApp('${app.id}')" class="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-4 py-2 rounded-xl font-bold transition-all">Delete</button>
+              </div>`
+            }
+          </td>
+        </tr>
+      `}).join('');
+    };
+
+    window.adminDeleteApp = async (targetAppId) => {
+      const btn = document.getElementById(`admin-del-${targetAppId}`);
+      if(btn) { 
+        btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i>'; 
+        btn.disabled = true; 
+      }
+      
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'uploaded_apps', targetAppId));
+        // Force refresh UI after deletion
+        setTimeout(() => renderAdmin(), 500); 
+      } catch (err) {
+        console.error("Admin delete error:", err);
+        if(btn) { btn.innerHTML = 'Error'; }
+      }
+    };
 
     // Initial Render
     renderHome();
