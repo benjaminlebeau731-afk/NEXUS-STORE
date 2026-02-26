@@ -23,13 +23,6 @@
   <!-- Phosphor Icons -->
   <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-  <script>
-    // Detect if running inside the Blob tab
-    if (window.location.protocol === 'blob:') {
-      document.documentElement.classList.add('is-blob');
-    }
-  </script>
-
   <style>
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -49,41 +42,9 @@
       to { opacity: 1; transform: scale(1); }
     }
     .animate-zoom-in { animation: zoomIn 0.3s ease-out forwards; }
-
-    /* Launcher Styles */
-    #launcher-root { display: none; }
-    :root:not(.is-blob) body { overflow: hidden; background-color: #020617; } /* Force dark mode for launcher */
-    :root:not(.is-blob) #app-root { display: none !important; }
-    :root:not(.is-blob) #launcher-root { display: flex !important; }
   </style>
 </head>
 <body class="bg-[#f4f4f6] dark:bg-slate-950 text-slate-900 dark:text-slate-200 transition-colors duration-300 min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
-
-  <!-- LAUNCHER ROOT -->
-  <div id="launcher-root" class="fixed inset-0 z-[100] flex-col items-center justify-center bg-slate-950 text-white">
-    <div class="w-24 h-24 bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-indigo-500/30 mb-8 animate-zoom-in rotate-3">
-      <i class="ph-fill ph-play text-5xl ml-2"></i>
-    </div>
-    <h1 class="text-5xl sm:text-6xl font-black mb-4 tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">NexusStore</h1>
-    <p class="text-slate-400 mb-8 text-lg font-medium max-w-sm text-center">Securely launch the decentralized app store in an isolated Blob environment.</p>
-    
-    <div id="auth-container" class="w-full max-w-sm flex flex-col gap-4 mb-8">
-      <button id="btn-google-login" class="group relative w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-slate-50 text-slate-900 rounded-2xl font-bold text-lg transition-all shadow-xl hover:-translate-y-1">
-        <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-6 h-6" />
-        <span>Sign in with Google</span>
-      </button>
-      <button id="btn-guest-login" class="text-slate-400 hover:text-white font-medium text-sm transition-colors underline decoration-slate-600 underline-offset-4 mt-2">
-        Or continue as guest
-      </button>
-      <p id="auth-error" class="text-red-400 text-sm font-medium text-center hidden mt-2 bg-red-900/20 p-3 rounded-xl border border-red-500/20"></p>
-    </div>
-
-    <button id="btn-launch-blob" class="hidden group relative px-10 py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold text-lg transition-all duration-300 hover:-translate-y-1 active:translate-y-0 shadow-[0_10px_40px_-10px_rgba(99,102,241,0.8)] overflow-hidden flex items-center gap-3">
-      <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
-      <i class="ph-fill ph-rocket-launch text-2xl relative z-10 group-hover:-translate-y-1 transition-transform"></i>
-      <span class="relative z-10">Start NexusStore</span>
-    </button>
-  </div>
 
   <!-- APP ROOT -->
   <div id="app-root">
@@ -321,10 +282,8 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithCredential } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    const isBlob = window.location.protocol === 'blob:';
 
     // USER FIREBASE CONFIGURATION
     const myFirebaseConfig = {
@@ -337,93 +296,6 @@
       measurementId: "G-KYY1FTGSQ1"
     };
 
-    if (!isBlob) {
-      // Logic for the Launcher Window
-      const fConf = myFirebaseConfig;
-      
-      let appLauncher, authLauncher;
-      try {
-        appLauncher = initializeApp(fConf);
-        authLauncher = getAuth(appLauncher);
-      } catch(e) { console.warn("Firebase init failed in launcher", e); }
-
-      let googleIdToken = null;
-
-      const btnGoogle = document.getElementById('btn-google-login');
-      const btnGuest = document.getElementById('btn-guest-login');
-      const btnLaunch = document.getElementById('btn-launch-blob');
-      const authContainer = document.getElementById('auth-container');
-      const authError = document.getElementById('auth-error');
-
-      btnGoogle.addEventListener('click', async () => {
-        if (!authLauncher) {
-          authError.textContent = "Firebase configuration missing. Cannot connect to Google.";
-          authError.classList.remove('hidden');
-          return;
-        }
-        try {
-          btnGoogle.innerHTML = '<i class="ph ph-spinner animate-spin text-xl"></i> <span>Connecting...</span>';
-          
-          const provider = new GoogleAuthProvider();
-          const result = await signInWithPopup(authLauncher, provider);
-          const credential = GoogleAuthProvider.credentialFromResult(result);
-          googleIdToken = credential.idToken;
-          
-          authContainer.classList.add('hidden');
-          btnLaunch.classList.remove('hidden');
-        } catch (err) {
-          console.error("Google Auth Error:", err);
-          btnGoogle.innerHTML = '<img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-6 h-6" /> <span>Sign in with Google</span>';
-          
-          if (err.code === 'auth/unauthorized-domain') {
-            authError.textContent = "Domain not authorized. Please add this URL to your Firebase Authentication settings, or use Guest mode.";
-          } else if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment') {
-            authError.textContent = "Popups are blocked in this environment. Please continue as guest.";
-          } else {
-            authError.textContent = err.message || "Failed to sign in.";
-          }
-          authError.classList.remove('hidden');
-        }
-      });
-
-      btnGuest.addEventListener('click', () => {
-        googleIdToken = null;
-        authContainer.classList.add('hidden');
-        btnLaunch.classList.remove('hidden');
-      });
-
-      btnLaunch.addEventListener('click', () => {
-        const btn = document.getElementById('btn-launch-blob');
-        btn.innerHTML = '<i class="ph ph-spinner animate-spin text-2xl"></i> <span class="relative z-10">Launching...</span>';
-        
-        setTimeout(() => {
-          // 1. Safely grab platform variables
-          const aId = typeof __app_id !== 'undefined' ? __app_id : (typeof window.__app_id !== 'undefined' ? window.__app_id : null);
-          const iTok = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : (typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null);
-
-          // 2. Create an injection script so the Blob environment knows the Firebase info
-          const inject = `<script>
-            window.__firebase_config = ${JSON.stringify(fConf)};
-            window.__app_id = ${JSON.stringify(aId)};
-            window.__initial_auth_token = ${JSON.stringify(iTok)};
-            window.__google_id_token = ${googleIdToken ? JSON.stringify(googleIdToken) : 'null'};
-          <\/script>`;
-
-          let rawHtml = document.documentElement.outerHTML;
-          // Inject the variables into the <head>
-          rawHtml = rawHtml.replace(/<head[^>]*>/i, match => match + '\n' + inject);
-
-          const htmlContent = "<!DOCTYPE html>\n" + rawHtml;
-          const blob = new Blob([htmlContent], { type: 'text/html' });
-          const blobUrl = URL.createObjectURL(blob);
-          window.open(blobUrl, '_blank');
-          
-          btn.innerHTML = '<div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div><i class="ph-fill ph-rocket-launch text-2xl relative z-10 group-hover:-translate-y-1 transition-transform"></i><span class="relative z-10">Start NexusStore</span>';
-        }, 150);
-      });
-    } else {
-
-    // --- FIREBASE INIT (Only runs in Blob tab) ---
     let db = null;
     let auth = null;
     let currentUser = null;
@@ -440,18 +312,12 @@
 
         const initAuth = async () => {
           try {
-            if (window.__google_id_token) {
-              const credential = GoogleAuthProvider.credential(window.__google_id_token);
-              await signInWithCredential(auth, credential);
-              return;
-            }
-
             const token = typeof window.__initial_auth_token !== 'undefined' && window.__initial_auth_token ? window.__initial_auth_token : (typeof __initial_auth_token !== 'undefined' && __initial_auth_token ? __initial_auth_token : null);
             if (token) {
               try {
                 await signInWithCustomToken(auth, token);
               } catch (tokenErr) {
-                console.warn("Custom token invalid or already consumed in Blob tab. Falling back to anonymous.", tokenErr);
+                console.warn("Custom token invalid. Falling back to anonymous.", tokenErr);
                 await signInAnonymously(auth);
               }
             } else {
@@ -1247,7 +1113,6 @@
     // Initial Render
     renderHome();
 
-    } // END isBlob CHECK
   </script>
 </body>
 </html>
