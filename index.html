@@ -316,16 +316,15 @@
     import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-    // USER FIREBASE CONFIGURATION
-    const myFirebaseConfig = {
-      apiKey: "AIzaSyCj0dXBXU_kElLsrTZBpHYk232hPGO62ho",
-      authDomain: "app-store-e4605.firebaseapp.com",
-      projectId: "app-store-e4605",
-      storageBucket: "app-store-e4605.firebasestorage.app",
-      messagingSenderId: "69260653568",
-      appId: "1:69260653568:web:4381084078ddecdffd54e5",
-      measurementId: "G-KYY1FTGSQ1"
-    };
+    // Grab environment-provided Firebase Config to keep secrets secure.
+    let firebaseConfig = {};
+    if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+      try {
+        firebaseConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+      } catch (e) {
+        console.error("Error parsing __firebase_config:", e);
+      }
+    }
 
     let db = null;
     let auth = null;
@@ -334,8 +333,6 @@
 
     // Wrap in try/catch so a failing config won't stop default apps from rendering
     try {
-      const firebaseConfig = myFirebaseConfig;
-
       if (Object.keys(firebaseConfig).length > 0) {
         const app = initializeApp(firebaseConfig);
         auth = getAuth(app);
