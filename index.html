@@ -1,2 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bluetooth Screen Sync</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background-color: #121212; color: white; }
+        button { padding: 15px 20px; margin: 10px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; }
+        #connectBtn { background-color: #008CBA; color: white; }
+        #syncBtn { background-color: #4CAF50; color: white; }
+        #colorPreview { width: 150px; height: 150px; margin: 20px auto; border: 3px solid white; border-radius: 15px; background-color: black; }
+        video, canvas { display: none; }
+    </style>
+</head>
+<body>
 
+    <h2>Monitor to Bluetooth Light Sync</h2>
+    <p>Note: Must be run in Chrome or Edge.</p>
+    
+    <button id="connectBtn">1. Connect Bluetooth Lights</button>
+    <button id="syncBtn">2. Start Screen Sync</button>
+
+    <div id="colorPreview"></div>
+
+    <video id="video" autoplay></video>
+    <canvas id="canvas" width="64" height="64"></canvas>
+
+    <script>
+        let lightCharacteristic = null;
+        let syncInterval = null;
+
+        // --- BLUETOOTH CONFIGURATION ---
+        // These UUIDs are for common generic Bluetooth RGB controllers. 
+        // You may need to change these depending on your exact light brand!
+        const SERVICE_UUID = '0000ffe5-0000-1000-8000-00805f9b34fb'; 
+        const CHARACTERISTIC_UUID = '0000ffe9-0000-1000-8000-00805f9b34fb';
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            try {
+                console.log("Requesting Bluetooth Device...");
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [SERVICE_UUID]
+                });
+
+                console.log("Connecting to GATT Server...");
+                const server = await device.gatt.connect();
+
+                console.log("Getting Service...");
+                const service = await server.getPrimaryService(SERVICE_UUID);
+
+                console.log("Getting Characteristic...");
+                lightCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+                alert("Successfully connected to lights!");
+                document.getElementById('connectBtn').innerText = "Connected!";
+                document.getElementById('connectBtn').style.backgroundColor = "green";
+            } catch (error) {
+                console.error("Bluetooth Error:", error);
+                alert("Could not connect. Make sure your lights are on, close to the PC, and not connected to your phone app right now.");
+            }
+        });
+
+        // --- SCREEN SYNC CONFIGURATION ---
+        document.getElementById('syncBtn').addEventListener('click', async () => {
+            if (!lightCharacteristic) {
+                alert("Please connect to the Bluetooth lights first!");
+                return;
+            }
+
+            try {
+                // Ask user to select the screen/monitor
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                // Sample the screen 5 times a second (every 200ms)
+                // Sending Bluetooth commands too fast can crash the browser
+                syncInterval = setInterval(() => {
+                    // Draw the current video frame to the tiny canvas
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
+                    // Get the pixel data from the middle of the screen
+                    const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    
+                    let r = 0, g = 0, b = 0;
+                    let count = 0;
+                    
+                    // Calculate the average color
+                    for (let i = 0; i < frameData.length; i += 16) { // Skip pixels to save CPU
+                        r += frameData[i];
+                        g += frameData[i + 1];
+                        b += frameData[i + 2];
+                        count++;
+                    }
+                    
+                    r = Math.floor(r / count);
+                    g = Math.floor(g / count);
+                    b = Math.floor(b / count);
+
+                    // Update the preview box on the webpage
+                    document.getElementById('colorPreview').style.backgroundColor = `rgb(${r},${g},${b})`;
+
+                    // Send the color to the Bluetooth light
+                    sendColorToLight(r, g, b);
+
+                }, 200);
+
+                // Stop syncing if the user stops screen sharing
+                stream.getVideoTracks()[0].onended = () => {
+                    clearInterval(syncInterval);
+                    alert("Screen sync stopped.");
+                };
+
+            } catch (error) {
+                console.error("Screen Capture Error:", error);
+            }
+        });
+
+        function sendColorToLight(r, g, b) {
+            if (!lightCharacteristic) return;
+
+            // This is the byte array for common generic RGB strips.
+            // Format: [0x56, Red, Green, Blue, White, 0xF0, 0xAA]
+            const data = new Uint8Array([0x56, r, g, b, 0x00, 0xf0, 0xaa]);
+            
+            // writeValueWithoutResponse is faster and better for real-time sync
+            lightCharacteristic.writeValueWithoutResponse(data).catch(err => {
+                console.error("Failed to send color:", err);
+            });
+        }
+    </script>
+</body>
 </html>
